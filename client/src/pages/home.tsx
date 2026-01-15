@@ -15,11 +15,11 @@ export default function Home() {
   
   const synthesisRef = useRef<SpeechSynthesis | null>(null);
   const recognitionRef = useRef<any>(null);
+  const isAiSpeakingRef = useRef(false);
 
   useEffect(() => {
     synthesisRef.current = window.speechSynthesis;
     
-    // Initialize Web Speech API for Recognition
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       recognitionRef.current = new SpeechRecognition();
@@ -28,13 +28,23 @@ export default function Home() {
       recognitionRef.current.lang = 'en-US';
 
       recognitionRef.current.onresult = (event: any) => {
-        const transcript = Array.from(event.results)
-          .map((result: any) => result[0])
-          .map((result: any) => result.transcript)
-          .join('');
+        // If AI is speaking, ignore microphone input to prevent feedback loops
+        if (isAiSpeakingRef.current) return;
 
-        if (event.results[event.results.length - 1].isFinal) {
-          handleUserSpeech(transcript);
+        const results = event.results;
+        const lastResult = results[results.length - 1];
+        
+        if (lastResult.isFinal) {
+          const transcript = lastResult[0].transcript.trim();
+          if (transcript.length > 0) {
+            handleUserSpeech(transcript);
+          }
+        }
+      };
+
+      recognitionRef.current.onend = () => {
+        if (isActive) {
+          recognitionRef.current.start();
         }
       };
 
@@ -50,17 +60,30 @@ export default function Home() {
       synthesisRef.current?.cancel();
       recognitionRef.current?.stop();
     };
-  }, []);
+  }, [isActive]);
 
   const speak = (text: string) => {
     if (isMuted || !synthesisRef.current) return;
+    
     synthesisRef.current.cancel();
+    isAiSpeakingRef.current = true;
+    
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.1;
     utterance.pitch = 1.0;
+    
     const voices = synthesisRef.current.getVoices();
     const auraVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Female')) || voices[0];
     if (auraVoice) utterance.voice = auraVoice;
+    
+    utterance.onend = () => {
+      isAiSpeakingRef.current = false;
+    };
+
+    utterance.onerror = () => {
+      isAiSpeakingRef.current = false;
+    };
+
     synthesisRef.current.speak(utterance);
   };
 
@@ -73,8 +96,8 @@ export default function Home() {
     };
     setMessages(prev => [...prev, userMsg]);
     
-    // Simple AI Logic to respond like a human
     setIsTyping(true);
+    // Dynamic delay based on response length for a more human feel
     setTimeout(() => {
       const response = generateAIResponse(text);
       const aiMsg: Message = {
@@ -87,35 +110,41 @@ export default function Home() {
       setAnalysis(response.analysis);
       setIsTyping(false);
       speak(response.text);
-    }, 1500);
+    }, 800 + Math.random() * 1000);
   };
 
   const generateAIResponse = (input: string): { text: string; analysis: AnalysisData } => {
     const lowerInput = input.toLowerCase();
     
-    // Inference Logic based on speech patterns
-    let age = "Unknown";
-    let gender: "Male" | "Female" | "Unknown" = "Unknown";
-    let confidence: "low" | "medium" | "high" = "low";
+    // Improved Inference logic
+    let age = analysis?.age_range || "Unknown";
+    let gender: "Male" | "Female" | "Unknown" = analysis?.gender || "Unknown";
+    let confidence: "low" | "medium" | "high" = analysis?.confidence || "low";
 
-    if (lowerInput.includes("brother") || lowerInput.includes("gaming") || lowerInput.includes("guy")) {
-      age = "25-35";
+    if (lowerInput.match(/\b(bro|dude|man|guy|him)\b/)) {
       gender = "Male";
-      confidence = "high";
-    } else if (lowerInput.includes("hello") || lowerInput.includes("hi")) {
-       confidence = "low";
+      confidence = "medium";
+    } else if (lowerInput.match(/\b(girl|her|she|woman)\b/)) {
+      gender = "Female";
+      confidence = "medium";
     }
 
-    const responses = [
-      "That's interesting! Tell me more about that.",
-      "I hear you. It sounds like you're passionate about this.",
-      "I'm analyzing your speech patterns right now. You sound very articulate.",
-      "Got it. How does that make you feel?",
-      "Interesting perspective. I'm updating my inference model as we speak."
+    if (lowerInput.match(/\b(90s|retro|college|work|job)\b/)) {
+      age = "25-35";
+      confidence = "high";
+    }
+
+    const casualResponses = [
+      "I get that. It's a really unique way to look at it.",
+      "That's interesting. I'm actually curious to hear more about that part.",
+      "Right, I see what you mean. It definitely makes sense in that context.",
+      "Totally. It's funny how things like that work out, isn't it?",
+      "I'm with you. Honestly, I think most people would feel the same way.",
+      "That's a fair point. I'm just processing how that fits into the bigger picture here."
     ];
     
     return {
-      text: responses[Math.floor(Math.random() * responses.length)],
+      text: casualResponses[Math.floor(Math.random() * casualResponses.length)],
       analysis: { age_range: age, gender, confidence }
     };
   };
@@ -123,17 +152,21 @@ export default function Home() {
   const toggleSession = () => {
     if (isActive) {
       recognitionRef.current?.stop();
+      synthesisRef.current?.cancel();
+      isAiSpeakingRef.current = false;
       setIsActive(false);
     } else {
+      setMessages([]);
+      recognitionRef.current?.start();
+      setIsActive(true);
+      const intro = "I'm listening. We can just talk normally.";
       setMessages([{
         id: "start",
         role: "ai",
-        text: "System active. I'm listening. Speak naturally.",
+        text: intro,
         timestamp: new Date()
       }]);
-      recognitionRef.current?.start();
-      setIsActive(true);
-      speak("System active. I'm listening. Speak naturally.");
+      speak(intro);
     }
   };
 
@@ -159,7 +192,7 @@ export default function Home() {
             </div>
             <div>
               <h1 className="text-xl font-display font-bold tracking-tight">Aura Interface</h1>
-              <p className="text-xs text-muted-foreground font-mono">Real-Time Voice Analysis Module</p>
+              <p className="text-xs text-muted-foreground font-mono">Conversational Analysis Module</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -174,7 +207,7 @@ export default function Home() {
             <div className="flex items-center gap-2 border-l border-white/10 pl-4">
               <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-red-500 animate-pulse shadow-[0_0_10px_var(--color-red-500)]' : 'bg-muted'}`} />
               <span className="text-xs font-mono uppercase text-muted-foreground">
-                {isActive ? "System Listening" : "Standby"}
+                {isActive ? "Active Conversation" : "Standby"}
               </span>
             </div>
           </div>
@@ -197,13 +230,13 @@ export default function Home() {
                     )}
                  >
                    {isActive ? (
-                     <><MicOff className="w-4 h-4 mr-2" /> Stop Listening</>
+                     <><MicOff className="w-4 h-4 mr-2" /> End Conversation</>
                    ) : (
-                     <><Mic className="w-4 h-4 mr-2" /> Start Live Conversation</>
+                     <><Mic className="w-4 h-4 mr-2" /> Start Talking</>
                    )}
                  </Button>
-                 <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-tighter opacity-50">
-                   {isActive ? "AI is processing your voice in real-time" : "Click to activate voice capture"}
+                 <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-tighter opacity-50 text-center max-w-xs">
+                   {isActive ? "Speak naturally. I'll respond when you finish a thought." : "Click to start a natural conversation with the AI"}
                  </p>
                </div>
             </div>
@@ -211,7 +244,7 @@ export default function Home() {
             <div className="flex-1 glass-card rounded-xl p-6 min-h-0 flex flex-col">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xs font-mono uppercase text-muted-foreground flex items-center gap-2">
-                  <Sparkles className="w-3 h-3 text-primary" /> Live Conversation Transcript
+                  <Sparkles className="w-3 h-3 text-primary" /> Live Transcript
                 </h2>
                 <Button 
                   variant="ghost" 
@@ -219,7 +252,7 @@ export default function Home() {
                   onClick={() => setMessages([])}
                   className="h-6 px-2 text-[10px] font-mono uppercase opacity-50 hover:opacity-100"
                 >
-                  Clear Logs
+                  Clear History
                 </Button>
               </div>
               <ChatTranscript messages={messages} isTyping={isTyping} />
