@@ -28,7 +28,6 @@ export default function Home() {
       recognitionRef.current.lang = 'en-US';
 
       recognitionRef.current.onresult = (event: any) => {
-        // If AI is speaking, ignore microphone input to prevent feedback loops
         if (isAiSpeakingRef.current) return;
 
         const results = event.results;
@@ -69,11 +68,12 @@ export default function Home() {
     isAiSpeakingRef.current = true;
     
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.1;
+    utterance.rate = 1.0;
     utterance.pitch = 1.0;
     
     const voices = synthesisRef.current.getVoices();
-    const auraVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Female')) || voices[0];
+    // Prefer more natural sounding voices
+    const auraVoice = voices.find(v => v.name.includes('Premium') || v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Female')) || voices[0];
     if (auraVoice) utterance.voice = auraVoice;
     
     utterance.onend = () => {
@@ -97,7 +97,8 @@ export default function Home() {
     setMessages(prev => [...prev, userMsg]);
     
     setIsTyping(true);
-    // Dynamic delay based on response length for a more human feel
+    
+    // Simulate thinking time
     setTimeout(() => {
       const response = generateAIResponse(text);
       const aiMsg: Message = {
@@ -110,41 +111,73 @@ export default function Home() {
       setAnalysis(response.analysis);
       setIsTyping(false);
       speak(response.text);
-    }, 800 + Math.random() * 1000);
+    }, 1000);
   };
 
   const generateAIResponse = (input: string): { text: string; analysis: AnalysisData } => {
     const lowerInput = input.toLowerCase();
     
-    // Improved Inference logic
     let age = analysis?.age_range || "Unknown";
     let gender: "Male" | "Female" | "Unknown" = analysis?.gender || "Unknown";
     let confidence: "low" | "medium" | "high" = analysis?.confidence || "low";
 
-    if (lowerInput.match(/\b(bro|dude|man|guy|him)\b/)) {
+    // Dynamic Inference Logic
+    if (lowerInput.match(/\b(bro|man|guy|dude|boy)\b/)) {
       gender = "Male";
-      confidence = "medium";
-    } else if (lowerInput.match(/\b(girl|her|she|woman)\b/)) {
+      confidence = "high";
+    } else if (lowerInput.match(/\b(girl|woman|lady|she|her)\b/)) {
       gender = "Female";
-      confidence = "medium";
-    }
-
-    if (lowerInput.match(/\b(90s|retro|college|work|job)\b/)) {
-      age = "25-35";
       confidence = "high";
     }
 
-    const casualResponses = [
-      "I get that. It's a really unique way to look at it.",
-      "That's interesting. I'm actually curious to hear more about that part.",
-      "Right, I see what you mean. It definitely makes sense in that context.",
-      "Totally. It's funny how things like that work out, isn't it?",
-      "I'm with you. Honestly, I think most people would feel the same way.",
-      "That's a fair point. I'm just processing how that fits into the bigger picture here."
+    if (lowerInput.match(/\b(college|university|student|study)\b/)) {
+      age = "18-24";
+      confidence = "medium";
+    } else if (lowerInput.match(/\b(work|office|job|boss|career)\b/)) {
+      age = "25-40";
+      confidence = "high";
+    }
+
+    // Contextual Conversation Logic
+    if (lowerInput.includes("how are you")) {
+      return {
+        text: "I'm doing great, thank you for asking! I'm enjoying our conversation. How about you? How is your day going?",
+        analysis: { age_range: age, gender, confidence }
+      };
+    }
+
+    if (lowerInput.includes("where are you from")) {
+      return {
+        text: "I exist in the digital realm, but I was designed to be your conversational companion. I don't have a physical hometown, but I'm right here with you now!",
+        analysis: { age_range: age, gender, confidence }
+      };
+    }
+
+    if (lowerInput.includes("hello") || lowerInput.includes("hi")) {
+      return {
+        text: "Hey there! It's good to hear from you. What's on your mind today?",
+        analysis: { age_range: age, gender, confidence }
+      };
+    }
+
+    if (lowerInput.includes("name")) {
+       return {
+        text: "My name is Aura. I'm an AI designed to analyze and converse. What should I call you?",
+        analysis: { age_range: age, gender, confidence }
+      };
+    }
+
+    // Default intelligent responses
+    const thoughtfulResponses = [
+      "That's a really interesting point. It makes me think about how we perceive things differently. Can you elaborate on that?",
+      "I see what you're saying. It's fascinating how those details connect. What led you to that thought?",
+      "I appreciate you sharing that. It adds a lot of context to our conversation. What else should I know?",
+      "That makes total sense. I'm actually picking up on some interesting patterns in how you describe that. Tell me more.",
+      "I'm following you. It sounds like this is something you've thought about quite a bit. What's the most important part of it for you?"
     ];
     
     return {
-      text: casualResponses[Math.floor(Math.random() * casualResponses.length)],
+      text: thoughtfulResponses[Math.floor(Math.random() * thoughtfulResponses.length)],
       analysis: { age_range: age, gender, confidence }
     };
   };
@@ -159,7 +192,7 @@ export default function Home() {
       setMessages([]);
       recognitionRef.current?.start();
       setIsActive(true);
-      const intro = "I'm listening. We can just talk normally.";
+      const intro = "System online. I'm ready to talk. What's on your mind?";
       setMessages([{
         id: "start",
         role: "ai",
@@ -191,8 +224,8 @@ export default function Home() {
               A
             </div>
             <div>
-              <h1 className="text-xl font-display font-bold tracking-tight">Aura Interface</h1>
-              <p className="text-xs text-muted-foreground font-mono">Conversational Analysis Module</p>
+              <h1 className="text-xl font-display font-bold tracking-tight text-glow">Aura Interface</h1>
+              <p className="text-xs text-muted-foreground font-mono">Conversational Intelligence v2.5</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -207,7 +240,7 @@ export default function Home() {
             <div className="flex items-center gap-2 border-l border-white/10 pl-4">
               <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-red-500 animate-pulse shadow-[0_0_10px_var(--color-red-500)]' : 'bg-muted'}`} />
               <span className="text-xs font-mono uppercase text-muted-foreground">
-                {isActive ? "Active Conversation" : "Standby"}
+                {isActive ? "Active Session" : "Standby"}
               </span>
             </div>
           </div>
@@ -230,13 +263,13 @@ export default function Home() {
                     )}
                  >
                    {isActive ? (
-                     <><MicOff className="w-4 h-4 mr-2" /> End Conversation</>
+                     <><MicOff className="w-4 h-4 mr-2" /> End Session</>
                    ) : (
-                     <><Mic className="w-4 h-4 mr-2" /> Start Talking</>
+                     <><Mic className="w-4 h-4 mr-2" /> Start Conversation</>
                    )}
                  </Button>
                  <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-tighter opacity-50 text-center max-w-xs">
-                   {isActive ? "Speak naturally. I'll respond when you finish a thought." : "Click to start a natural conversation with the AI"}
+                   {isActive ? "Speak naturally. Aura is responding to your intent." : "Engage in a human-like conversation with the AI"}
                  </p>
                </div>
             </div>
@@ -244,7 +277,7 @@ export default function Home() {
             <div className="flex-1 glass-card rounded-xl p-6 min-h-0 flex flex-col">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xs font-mono uppercase text-muted-foreground flex items-center gap-2">
-                  <Sparkles className="w-3 h-3 text-primary" /> Live Transcript
+                  <Sparkles className="w-3 h-3 text-primary" /> Live Interaction Transcript
                 </h2>
                 <Button 
                   variant="ghost" 
