@@ -77,7 +77,31 @@ export default function Home() {
     const lowerText = text.toLowerCase().trim();
     const words = lowerText.split(/\s+/).filter(w => w.length > 0);
     
-    // Check for Devanagari script (Hindi/Sanskrit)
+    // Check for Tamil script
+    const hasTamil = /[\u0B80-\u0BFF]/.test(text);
+    if (hasTamil) return "Tamil";
+    
+    // Check for Telugu script
+    const hasTelugu = /[\u0C00-\u0C7F]/.test(text);
+    if (hasTelugu) return "Telugu";
+    
+    // Check for Bengali script
+    const hasBengali = /[\u0980-\u09FF]/.test(text);
+    if (hasBengali) return "Bengali";
+    
+    // Check for Gujarati script
+    const hasGujarati = /[\u0A80-\u0AFF]/.test(text);
+    if (hasGujarati) return "Gujarati";
+    
+    // Check for Kannada script
+    const hasKannada = /[\u0C80-\u0CFF]/.test(text);
+    if (hasKannada) return "Kannada";
+    
+    // Check for Malayalam script
+    const hasMalayalam = /[\u0D00-\u0D7F]/.test(text);
+    if (hasMalayalam) return "Malayalam";
+    
+    // Check for Devanagari script (Hindi/Marathi/Sanskrit)
     const hasDevanagari = /[\u0900-\u097F]/.test(text);
     if (hasDevanagari) return "Hindi";
     
@@ -108,6 +132,30 @@ export default function Home() {
       'ohi', 'ehi', 'hanju', 'hegi', 'hovan', 'jithe', 'othe'
     ];
     
+    // Tamil words detection (common romanized Tamil words)
+    const tamilWords = [
+      'vanakkam', 'nandri', 'naan', 'ungal', 'eppadi', 'enna', 'eppo', 'enge',
+      'yaar', 'edhu', 'indha', 'andha', 'nama', 'avar', 'ivan', 'aval',
+      'nalla', 'nalladhu', 'sari', 'illa', 'irukku', 'irundhu', 'varuga', 'ponga',
+      'inga', 'anga', 'enga', 'sollunga', 'kekka', 'paaru', 'vaanga', 'kudukka'
+    ];
+    
+    // Telugu words detection (common romanized Telugu words)
+    const teluguWords = [
+      'namaskaram', 'dhanyavadalu', 'nenu', 'meeru', 'ela', 'emiti', 'eppudu',
+      'ekkada', 'evaru', 'edi', 'ee', 'aa', 'mana', 'mi', 'atanu', 'ame',
+      'manchidi', 'bavundi', 'ledu', 'undi', 'nundi', 'tho', 'cheppandi',
+      'ivvandi', 'teesuko', 'raandi', 'vellu', 'chudandi', 'vinandi'
+    ];
+    
+    // Bengali words detection (common romanized Bengali words)
+    const bengaliWords = [
+      'nomoshkar', 'dhonnobad', 'ami', 'apni', 'tumi', 'kemon', 'ki', 'kothay',
+      'ke', 'kono', 'eki', 'oi', 'amader', 'tomar', 'tar', 'bhalo', 'achhe',
+      'na', 'haan', 'theke', 'shothe', 'bolun', 'shunun', 'dekhun', 'jaben',
+      'asben', 'korben', 'din', 'esho', 'jao', 'koro'
+    ];
+    
     // English words detection (common words)
     const englishWords = [
       'hello', 'hi', 'hey', 'test', 'testing', 'system', 'good', 'great', 'nice', 'excellent',
@@ -128,53 +176,72 @@ export default function Home() {
     let hindiCount = 0;
     let punjabiCount = 0;
     let englishCount = 0;
+    let tamilCount = 0;
+    let teluguCount = 0;
+    let bengaliCount = 0;
     
     words.forEach(word => {
       const cleanWord = word.replace(/[.,!?;:]$/, ''); // Remove trailing punctuation
       if (hindiWords.includes(cleanWord)) hindiCount++;
       if (punjabiWords.includes(cleanWord)) punjabiCount++;
       if (englishWords.includes(cleanWord)) englishCount++;
+      if (tamilWords.includes(cleanWord)) tamilCount++;
+      if (teluguWords.includes(cleanWord)) teluguCount++;
+      if (bengaliWords.includes(cleanWord)) bengaliCount++;
     });
     
     const totalWords = words.length;
     const hindiPercent = totalWords > 0 ? (hindiCount / totalWords) * 100 : 0;
     const englishPercent = totalWords > 0 ? (englishCount / totalWords) * 100 : 0;
     const punjabiPercent = totalWords > 0 ? (punjabiCount / totalWords) * 100 : 0;
+    const tamilPercent = totalWords > 0 ? (tamilCount / totalWords) * 100 : 0;
+    const teluguPercent = totalWords > 0 ? (teluguCount / totalWords) * 100 : 0;
+    const bengaliPercent = totalWords > 0 ? (bengaliCount / totalWords) * 100 : 0;
     
-    console.log(`🔍 Lang Analysis - Total: ${totalWords} words | Hindi: ${hindiCount}(${hindiPercent.toFixed(0)}%) | English: ${englishCount}(${englishPercent.toFixed(0)}%) | Punjabi: ${punjabiCount}`);
+    console.log(`🔍 Lang Analysis - Total: ${totalWords} words | Hindi: ${hindiCount}(${hindiPercent.toFixed(0)}%) | English: ${englishCount}(${englishPercent.toFixed(0)}%) | Punjabi: ${punjabiCount} | Tamil: ${tamilCount} | Telugu: ${teluguCount} | Bengali: ${bengaliCount}`);
     
     // Priority-based detection (simplified logic)
     
-    // 1. Punjabi detection (any Punjabi word found)
+    // 1. Regional language detection (Tamil, Telugu, Bengali - high priority)
+    if (tamilCount >= 2) return "Tamil";
+    if (teluguCount >= 2) return "Telugu";
+    if (bengaliCount >= 2) return "Bengali";
+    
+    // 2. Punjabi detection (any Punjabi word found)
     if (punjabiCount >= 1) return "Punjabi";
     
-    // 2. Clear Hindi dominance
+    // 3. Clear Hindi dominance
     if (hindiCount >= 3) return "Hindi";
     if (hindiPercent >= 50) return "Hindi";
     
-    // 3. Clear English dominance
-    if (englishCount >= 3 && hindiCount === 0) return "English";
+    // 4. Clear English dominance
+    if (englishCount >= 3 && hindiCount === 0 && tamilCount === 0 && teluguCount === 0 && bengaliCount === 0) return "English";
     if (englishPercent >= 60) return "English";
     
-    // 4. Hinglish (mixed Hindi + English)
+    // 5. Hinglish (mixed Hindi + English)
     if (hindiCount >= 1 && englishCount >= 1) {
       if (hindiPercent >= 25 && englishPercent >= 25) return "Hinglish (Hindi+English)";
       if (hindiCount > englishCount) return "Hindi";
       if (englishCount > hindiCount) return "English";
     }
     
-    // 5. Small sentences (1-2 words)
+    // 6. Single word detection
+    if (tamilCount >= 1) return "Tamil";
+    if (teluguCount >= 1) return "Telugu";
+    if (bengaliCount >= 1) return "Bengali";
+    
+    // 7. Small sentences (1-2 words)
     if (totalWords <= 2) {
       if (hindiCount > 0) return "Hindi";
       if (englishCount > 0) return "English";
     }
     
-    // 6. Default fallback based on counts
+    // 8. Default fallback based on counts
     if (hindiCount > englishCount) return "Hindi";
     if (englishCount > hindiCount) return "English";
     if (englishCount === hindiCount && englishCount > 0) return "Hinglish (Hindi+English)";
     
-    // 7. Ultimate fallback - use English if nothing detected
+    // 9. Ultimate fallback - use English if nothing detected
     return "English";
   };
 
@@ -184,6 +251,20 @@ export default function Home() {
       return "hi-IN";
     } else if (detectedLang.includes("Punjabi")) {
       return "pa-IN";
+    } else if (detectedLang.includes("Tamil")) {
+      return "ta-IN";
+    } else if (detectedLang.includes("Telugu")) {
+      return "te-IN";
+    } else if (detectedLang.includes("Bengali")) {
+      return "bn-IN";
+    } else if (detectedLang.includes("Gujarati")) {
+      return "gu-IN";
+    } else if (detectedLang.includes("Kannada")) {
+      return "kn-IN";
+    } else if (detectedLang.includes("Malayalam")) {
+      return "ml-IN";
+    } else if (detectedLang.includes("Marathi")) {
+      return "mr-IN";
     } else if (detectedLang.includes("English")) {
       return "en-IN";
     } else if (detectedLang.includes("Hinglish")) {
