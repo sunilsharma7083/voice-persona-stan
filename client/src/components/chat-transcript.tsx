@@ -15,6 +15,8 @@ interface ChatTranscriptProps {
 }
 
 export function ChatTranscript({ messages, isTyping }: ChatTranscriptProps) {
+  // Show all messages now (both user and AI for full conversation)
+  
   return (
     <div className="flex flex-col space-y-4 h-full overflow-y-auto pr-2 scrollbar-hide">
       <AnimatePresence initial={false}>
@@ -36,13 +38,13 @@ export function ChatTranscript({ messages, isTyping }: ChatTranscriptProps) {
             
             <div
               className={cn(
-                "max-w-[80%] p-4 rounded-2xl backdrop-blur-sm border",
+                "max-w-[75%] p-3 rounded-2xl backdrop-blur-sm border text-sm",
                 msg.role === "user" 
                   ? "bg-accent/10 border-accent/20 text-accent-foreground rounded-br-none" 
-                  : "bg-card/50 border-white/10 text-foreground rounded-bl-none"
+                  : "bg-primary/5 border-primary/20 text-foreground rounded-bl-none"
               )}
             >
-              <p className="text-sm leading-relaxed">{msg.text}</p>
+              <p className="leading-relaxed">{msg.text}</p>
               <span className="text-[10px] opacity-40 mt-1 block font-mono">
                 {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
@@ -65,7 +67,7 @@ export function ChatTranscript({ messages, isTyping }: ChatTranscriptProps) {
              <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
                 <Sparkles className="w-4 h-4 text-primary" />
               </div>
-              <div className="bg-card/50 border border-white/10 p-4 rounded-2xl rounded-bl-none flex gap-1 items-center">
+              <div className="bg-primary/5 border border-primary/20 p-3 rounded-2xl rounded-bl-none flex gap-1 items-center">
                 <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
                 <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
                 <span className="w-1.5 h-1.5 bg-primary/50 rounded-full animate-bounce"></span>

@@ -6,6 +6,10 @@ export interface AnalysisData {
   age_range: string;
   gender: "Male" | "Female" | "Unknown";
   confidence: "low" | "medium" | "high";
+  language?: string;
+  accent?: string;
+  emotion?: string;
+  speechRate?: string;
   traits?: string[];
 }
 
@@ -90,6 +94,74 @@ export function AnalysisPanel({ data, isLoading }: AnalysisPanelProps) {
                   )} />
                </div>
             </div>
+
+            {/* Language Detection */}
+            {data.language && (
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs font-mono uppercase text-muted-foreground">
+                  <span>Detected Language</span>
+                  <span className="text-blue-400">{data.language}</span>
+                </div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: "85%" }}
+                    className="h-full bg-blue-500/50"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Emotion Detection */}
+            {data.emotion && (
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs font-mono uppercase text-muted-foreground">
+                  <span>Emotion</span>
+                  <span className="text-purple-400">{data.emotion}</span>
+                </div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: "75%" }}
+                    className="h-full bg-purple-500/50"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Accent Detection */}
+            {data.accent && (
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs font-mono uppercase text-muted-foreground">
+                  <span>Accent/Region</span>
+                  <span className="text-orange-400">{data.accent}</span>
+                </div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: "70%" }}
+                    className="h-full bg-orange-500/50"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Speech Rate */}
+            {data.speechRate && (
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs font-mono uppercase text-muted-foreground">
+                  <span>Speech Rate</span>
+                  <span className="text-green-400">{data.speechRate}</span>
+                </div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: "60%" }}
+                    className="h-full bg-green-500/50"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Confidence Meter */}
             <div className="space-y-2">

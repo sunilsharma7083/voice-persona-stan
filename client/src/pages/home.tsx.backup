@@ -1,0 +1,456 @@
+import { useState, useEffect, useRef } from "react";
+import { Mic, MicOff, RefreshCw, Play } from "lucide-react";
+import { AudioVisualizer } from "@/components/audio-visualizer";
+import { AnalysisPanel, AnalysisData } from "@/components/analysis-panel";
+import { Button } from "@/components/ui/button";
+import { MOCK_CONVERSATION } from "@/lib/mock-data";
+import generatedImage from '@assets/generated_images/futuristic_ai_data_background.png';
+
+// Declare SpeechRecognition types
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onerror: (event: any) => void;
+  onend: () => void;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognition;
+    webkitSpeechRecognition: new () => SpeechRecognition;
+  }
+}
+
+export default function Home() {
+  const [isActive, setIsActive] = useState(false);
+  const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
+  const [useDemo, setUseDemo] = useState(false);
+  const [simIndex, setSimIndex] = useState(0);
+  
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const pitchHistoryRef = useRef<number[]>([]);
+  const analysisIntervalRef = useRef<number | null>(null);
+
+  // Simple but effective real-time voice analysis
+  const analyzeVoiceContinuously = () => {
+    if (!analyserRef.current || !audioContextRef.current) return;
+
+    const analyser = analyserRef.current;
+    const bufferLength = analyser.fftSize;
+    const timeDomainData = new Uint8Array(bufferLength);
+    const frequencyData = new Uint8Array(analyser.frequencyBinCount);
+    
+    analyser.getByteTimeDomainData(timeDomainData);
+    analyser.getByteFrequencyData(frequencyData);
+
+    // Check if there's actual sound (not silence)
+    let sum = 0;
+    for (let i = 0; i < timeDomainData.length; i++) {
+      const normalized = (timeDomainData[i] - 128) / 128;
+      sum += normalized * normalized;
+    }
+    const rms = Math.sqrt(sum / timeDomainData.length);
+    
+    // If too quiet, skip
+    if (rms < 0.02) return;
+
+    // SIMPLE AUTOCORRELATION for pitch detection
+    const sampleRate = audioContextRef.current.sampleRate;
+    const correlations: number[] = [];
+    
+    // Calculate autocorrelation
+    for (let lag = 0; lag < bufferLength / 2; lag++) {
+      let sum = 0;
+      for (let i = 0; i < bufferLength - lag; i++) {
+        const val1 = (timeDomainData[i] - 128) / 128;
+        const val2 = (timeDomainData[i + lag] - 128) / 128;
+        sum += val1 * val2;
+      }
+      correlations.push(sum);
+    }
+
+    // Find the first strong peak (ignoring the peak at lag 0)
+    let bestLag = -1;
+    let bestCorrelation = 0;
+    
+    // Start looking after minimum frequency (50 Hz = sampleRate/50)
+    const minLag = Math.floor(sampleRate / 500); // 500 Hz max
+    const maxLag = Math.floor(sampleRate / 50);  // 50 Hz min
+    
+    for (let lag = minLag; lag < maxLag && lag < correlations.length; lag++) {
+      if (correlations[lag] > bestCorrelation && 
+          correlations[lag] > 0.5 * correlations[0]) {
+        bestCorrelation = correlations[lag];
+        bestLag = lag;
+      }
+    }
+
+    // Calculate pitch frequency
+    let pitch = 0;
+    if (bestLag > 0) {
+      pitch = sampleRate / bestLag;
+    }
+
+    // Only accept pitches in human voice range
+    if (pitch < 70 || pitch > 400) return;
+
+    // Store in history
+    pitchHistoryRef.current.push(pitch);
+    if (pitchHistoryRef.current.length > 30) {
+      pitchHistoryRef.current.shift();
+    }
+
+    // Need at least 10 samples before making decision
+    if (pitchHistoryRef.current.length < 10) return;
+
+    // Calculate median pitch (more robust than average)
+    const sortedPitches = [...pitchHistoryRef.current].sort((a, b) => a - b);
+    const medianPitch = sortedPitches[Math.floor(sortedPitches.length / 2)];
+    
+    // Calculate average for stability
+    const avgPitch = pitchHistoryRef.current.reduce((a, b) => a + b, 0) / pitchHistoryRef.current.length;
+
+    // SIMPLE DECISION BASED ON PITCH
+    // Male voices: 85-180 Hz (average ~120 Hz)
+    // Female voices: 165-255 Hz (average ~210 Hz)
+    
+    let detectedGender: "Male" | "Female" | "Unknown" = "Unknown";
+    let confidence: "low" | "medium" | "high" = "low";
+
+    if (medianPitch < 150) {
+      // Clearly male range
+      detectedGender = "Male";
+      confidence = medianPitch < 130 ? "high" : "medium";
+    } else if (medianPitch >= 150 && medianPitch < 170) {
+      // Borderline - check consistency
+      const maleCount = pitchHistoryRef.current.filter(p => p < 160).length;
+      const femaleCount = pitchHistoryRef.current.filter(p => p >= 170).length;
+      
+      if (maleCount > femaleCount) {
+        detectedGender = "Male";
+        confidence = "medium";
+      } else {
+        detectedGender = "Female";
+        confidence = "medium";
+      }
+    } else if (medianPitch >= 170 && medianPitch < 200) {
+      // Female range but check for deep female voice
+      detectedGender = "Female";
+      confidence = "medium";
+    } else {
+      // Clearly female range
+      detectedGender = "Female";
+      confidence = medianPitch > 220 ? "high" : "medium";
+    }
+
+    // Additional check: look at energy distribution
+    let lowFreqEnergy = 0;
+    let highFreqEnergy = 0;
+    const splitPoint = Math.floor(frequencyData.length * 0.2);
+    
+    for (let i = 0; i < splitPoint; i++) {
+      lowFreqEnergy += frequencyData[i];
+    }
+    for (let i = splitPoint; i < frequencyData.length / 2; i++) {
+      highFreqEnergy += frequencyData[i];
+    }
+    
+    const energyRatio = lowFreqEnergy / (highFreqEnergy + 1);
+    
+    // If energy ratio suggests male but pitch says female, reduce confidence
+    if (energyRatio > 1.5 && detectedGender === "Female") {
+      confidence = "low";
+    }
+    // If energy ratio suggests female but pitch says male, reduce confidence
+    if (energyRatio < 0.8 && detectedGender === "Male") {
+      confidence = "low";
+    }
+
+    // Update analysis state
+    setAnalysis({
+      age_range: "25-35",
+      gender: detectedGender,
+      confidence: confidence
+    });
+
+    console.log(`🎤 Pitch: ${medianPitch.toFixed(1)}Hz (avg: ${avgPitch.toFixed(1)}Hz) | Energy Ratio: ${energyRatio.toFixed(2)} → ${detectedGender} (${confidence})`);
+  };
+
+  // Real speech recognition
+  const startRealRecording = async () => {
+    setIsActive(true);
+    setMessages([]);
+    setAnalysis(null);
+    setUseDemo(false);
+    pitchHistoryRef.current = [];
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.");
+      setIsActive(false);
+      return;
+    }
+
+    try {
+      // Setup audio analysis for pitch detection
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false
+        } 
+      });
+      streamRef.current = stream;
+      
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 4096; // Higher resolution for better pitch detection
+      analyser.smoothingTimeConstant = 0.8; // Smooth out rapid fluctuations
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      // Start continuous voice analysis (every 100ms)
+      const intervalId = window.setInterval(() => {
+        analyzeVoiceContinuously();
+      }, 100);
+      analysisIntervalRef.current = intervalId;
+
+      setIsActive(true);
+    } catch (error) {
+      console.error("Failed to start voice analysis:", error);
+      alert("Failed to access microphone. Please ensure microphone permissions are granted.");
+      setIsActive(false);
+    }
+  };
+
+  const stopRecording = () => {
+    setIsActive(false);
+    
+    // Stop continuous analysis
+    if (analysisIntervalRef.current) {
+      clearInterval(analysisIntervalRef.current);
+      analysisIntervalRef.current = null;
+    }
+    
+    // Stop speech recognition
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    
+    // Stop audio analysis
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    
+    analyserRef.current = null;
+    pitchHistoryRef.current = [];
+    setSimIndex(999); // Stop demo if running
+  };
+
+  // Demo mode
+  const startSimulation = () => {
+    setIsActive(true);
+    setMessages([]);
+    setAnalysis(null);
+    setUseDemo(true);
+    setSimIndex(0);
+  };
+
+  useEffect(() => {
+    if (!isActive || !useDemo || simIndex >= MOCK_CONVERSATION.length) return;
+
+    const step = MOCK_CONVERSATION[simIndex];
+    
+    const timer = setTimeout(() => {
+      if (step.message) setMessages(prev => [...prev, step.message!]);
+      if (step.analysis) setAnalysis(step.analysis);
+      
+      setSimIndex(prev => prev + 1);
+      
+      if (simIndex === MOCK_CONVERSATION.length - 1) {
+        setIsActive(false);
+      }
+    }, step.delay - (simIndex > 0 ? MOCK_CONVERSATION[simIndex-1].delay : 0));
+
+    return () => clearTimeout(timer);
+  }, [isActive, useDemo, simIndex]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (analysisIntervalRef.current) {
+        clearInterval(analysisIntervalRef.current);
+      }
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
+
+
+  return (
+    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20 relative overflow-hidden">
+      {/* Background Image */}
+      <div 
+        className="absolute inset-0 z-0 opacity-20 pointer-events-none"
+        style={{
+          backgroundImage: `url(${generatedImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          filter: 'blur(2px) saturate(0.5)'
+        }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/80 z-0 pointer-events-none" />
+
+      {/* Main Container */}
+      <div className="relative z-10 container mx-auto p-4 h-screen flex flex-col gap-4">
+        
+        {/* Header */}
+        <header className="flex justify-between items-center py-4 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-background font-bold font-mono">
+              A
+            </div>
+            <div>
+              <h1 className="text-xl font-display font-bold tracking-tight">Aura Interface</h1>
+              <p className="text-xs text-muted-foreground font-mono">Voice Analysis Module v2.4</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* TTS Toggle */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setIsTTSEnabled(!isTTSEnabled);
+                if (isAISpeaking && ttsEngineRef.current) {
+                  ttsEngineRef.current.stop();
+                  setIsAISpeaking(false);
+                }
+              }}
+              className="text-xs"
+              title={isTTSEnabled ? "Voice Responses ON" : "Voice Responses OFF"}
+            >
+              {isTTSEnabled ? <Volume2 className="w-4 h-4 text-green-500" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
+            </Button>
+            
+            {/* Recording Status */}
+            <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-red-500 animate-pulse' : 'bg-muted'}`} />
+            <span className="text-xs font-mono uppercase text-muted-foreground">
+              {isActive ? "Live Recording" : isAISpeaking ? "AI Speaking" : "Standby"}
+            </span>
+          </div>
+        </header>
+
+        {/* Content Grid */}
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-4 min-h-0">
+          
+          {/* Left: Chat & Visualization */}
+          <div className="md:col-span-8 flex flex-col gap-4 h-full min-h-0">
+            {/* Visualizer Card */}
+            <div className="glass-card rounded-xl p-6 flex flex-col items-center justify-center min-h-[160px] relative overflow-hidden">
+               <div className="absolute inset-0 bg-grid-white/[0.02] -z-10" />
+               <AudioVisualizer isActive={isActive} />
+               <div className="mt-4 flex gap-4">
+                 {!isActive ? (
+                   <>
+                     <Button 
+                      onClick={startRealRecording}
+                      className="bg-green-600 text-white hover:bg-green-700 rounded-full px-8 font-mono uppercase tracking-widest text-xs h-10 shadow-[0_0_20px_rgba(34,197,94,0.3)]"
+                     >
+                       <Mic className="w-3 h-3 mr-2" /> Start Recording
+                     </Button>
+                     <Button 
+                      onClick={startSimulation}
+                      variant="outline"
+                      className="border-primary/50 text-primary hover:bg-primary/10 rounded-full px-8 font-mono uppercase tracking-widest text-xs h-10"
+                     >
+                       <Play className="w-3 h-3 mr-2" /> Demo
+                     </Button>
+                   </>
+                 ) : (
+                   <Button 
+                    variant="destructive"
+                    onClick={stopRecording}
+                    className="rounded-full px-8 font-mono uppercase tracking-widest text-xs h-10"
+                   >
+                     <MicOff className="w-3 h-3 mr-2" /> Stop
+                   </Button>
+                 )}
+                 <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => { stopRecording(); setMessages([]); setAnalysis(null); }}
+                  className="rounded-full border-white/10 hover:bg-white/5"
+                 >
+                   <RefreshCw className="w-4 h-4" />
+                 </Button>
+               </div>
+            </div>
+
+            {/* Transcript Area */}
+            <div className="flex-1 glass-card rounded-xl p-6 min-h-0 flex flex-col">
+              <h2 className="text-xs font-mono uppercase text-muted-foreground mb-4 flex items-center gap-2">
+                <Mic className="w-3 h-3" /> Live Transcript
+              </h2>
+              <ChatTranscript messages={messages} />
+            </div>
+          </div>
+
+          {/* Right: Analysis Panel */}
+          <div className="md:col-span-4 h-full min-h-0">
+            <AnalysisPanel data={analysis} />
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}

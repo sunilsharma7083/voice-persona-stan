@@ -31,7 +31,7 @@ export const MOCK_CONVERSATION: {
     },
     analysis: {
       age_range: "23-28",
-      gender: "Male",
+      gender: "Female",
       confidence: "medium"
     }
   },
@@ -59,7 +59,7 @@ export const MOCK_CONVERSATION: {
     },
     analysis: {
       age_range: "28-35",
-      gender: "Male",
+      gender: "Female",
       confidence: "high"
     }
   },
@@ -81,14 +81,9 @@ export const MOCK_CONVERSATION: {
     delay: 16000,
     message: {
       id: "6",
-      role: "user",
+      role: "ai",
       text: "That sounds awesome. I think he'd love an emulator. Thanks for the suggestion!",
       timestamp: new Date()
-    },
-    analysis: {
-      age_range: "30-36",
-      gender: "Male",
-      confidence: "high"
     }
   }
 ];
